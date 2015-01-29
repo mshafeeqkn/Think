@@ -1,0 +1,116 @@
+#include <bz2lib.h>
+
+int main(int argc, char *argv[])
+{
+
+    
+    if(argc!=4)
+    {
+        printf("usage\n(compress) => ./output -c <source> <destination>\n");
+        exit(1);
+    }
+
+    if(!strcmp(argv[1],"-c")||strcmp(argv[1],"-C"))
+    {
+        if(bzWriteCompressed(argv[2], argv[3])==OK)
+        {
+	printf("+-------------------------------------------------------+\n");
+	printf("|-------------file compressed successfully--------------|\n");
+	printf("+-------------------------------------------------------+\n");
+        }
+    }
+    
+    return 0;
+}
+
+int bzInitCompression(char* inputBuffer, char* outputBuffer)
+{
+    stream = malloc(sizeof(bz_stream));
+    
+    bzero(stream, sizeof(bz_stream));
+    
+    stream->bzalloc = NULL;
+    stream->bzfree = NULL;
+    stream->opaque = NULL;
+    
+    if(BZ2_bzCompressInit(stream, BLOCK_SIZE, VERBOSITY, WORKFACTOR)!= BZ_OK)
+    {
+        return NOT_OK;
+    }
+    return OK;
+}
+
+int bzWriteCompressed(char *sourceFile, char *destFile)
+{
+    
+    int byteRead;
+//     int byteWrote;
+    int totalCompressedByte = 0;
+    int totalUncompressedByte = 0;
+    char inputBuffer[BUFFER_SIZE];
+    char outputBuffer[2*BUFFER_SIZE];
+        
+
+    sourceFileDesc = open(sourceFile, O_RDONLY);
+    if(sourceFileDesc<0)
+    {
+        printf("Source file does not exist...!!!\n");
+        return NOT_OK;
+    }
+    
+    destFileDesc = open(destFile, O_WRONLY|O_CREAT);
+    if(destFileDesc<0)
+    {
+        printf("dest can't open...!!!\n");
+        return NOT_OK;        
+    }
+    bzero(inputBuffer, BUFFER_SIZE);
+    bzero(outputBuffer, BUFFER_SIZE);   
+    do{
+        byteRead = read(sourceFileDesc, inputBuffer, BUFFER_SIZE);
+        if(byteRead==0)//
+        {
+	break;
+        }
+        totalUncompressedByte += byteRead;
+        if(bzInitCompression(inputBuffer, outputBuffer)!=OK)
+        {
+	return NOT_OK;
+        }
+        stream->avail_in = byteRead;
+        stream->next_in = inputBuffer;
+        stream->next_out = outputBuffer;
+        stream->avail_out = BUFFER_SIZE; 
+        
+        while(BZ2_bzCompress(stream, BZ_RUN)!=BZ_RUN_OK);
+        
+        while(BZ2_bzCompress(stream, BZ_FINISH)!=BZ_STREAM_END);
+        
+        write(destFileDesc, 
+		  outputBuffer,
+		  stream->total_out_lo32 - totalCompressedByte);
+        totalCompressedByte = stream->total_out_lo32;
+    }while(byteRead==BUFFER_SIZE);
+
+
+    printf("+----------------------file size------------------------+\n");
+    printf("|-----before : %07d B-------after : %07d B--------|\n",
+	        totalUncompressedByte, 
+	        totalCompressedByte);
+
+    if(finilizeCompression()==OK)
+    {
+        return OK;
+    }
+    return NOT_OK;
+}
+
+int finilizeCompression()
+{
+    close(destFileDesc);
+    if(BZ2_bzCompressEnd(stream)==BZ_OK)
+    {
+        return OK;
+    }
+    return NOT_OK;
+}
